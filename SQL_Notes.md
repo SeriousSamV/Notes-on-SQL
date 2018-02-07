@@ -2,6 +2,8 @@
 
 > by _**Samuel0Paul**_ - [paulsamuelvishesh@live.com](mailto:paulsamuelvishesh@live.com)
 
+<a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png" /></a><br />This work by <a xmlns:cc="http://creativecommons.org/ns#" href="mailto:paulsamuelvishesh" property="cc:attributionName" rel="cc:attributionURL">Samuel0Paul</a> is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International License</a>.
+
 ---
 
 ## Into
@@ -749,6 +751,115 @@ INTERSECT
 > * The Expression we specify for the `AVG` and `SUM` functions must result in a numeric value
 > * The Expression for the `MIN`, `MAX`, and `COUNT` functions can result in a _numeric_, _date_, or a _string_ value
 
+```SQL
+-- examples
+
+-- a summary query that counts unpaid invoices and calculates the total due
+SELECT
+  COUNT(*) [Number Of Invoices],
+  SUM(InvoiceTotal - PaymentTotal - CreditTotal) [Total Due]
+FROM Invoices
+WHERE (InvoiceTotal - PaymentTotal - CreditTotal) > 0;
+
+-- In a _Summary Query_, we can not include non-aggregate columns from the base table
+SELECT
+  COUNT(*) [Number Of Invoices],
+  InvoiceID -- ERROR, can't include non-aggregate column in a Summary Query
+FROM Invoices;
+```
+
+* A SELECT Statement that includes an Aggregate Function can be called as a _**Summary Query**_
+* `COUNT` function doesn't ignore `NULL` values
+* In a _Summary Query_, we can not include non-aggregate columns from the base table unless the column is specified in a `GROUP BY` clause or the `OVER` clause is included for each aggregate function
+
+### Grouping and Summarizing Data using `GROUP BY` and `HAVING` Clauses
+
+* `GROUP BY` Clause groups the rows of a result set based on one or more columns or expressions
+* The Aggregate is calculated for each set of values that result from the columns named in the `GROUP BY` Clause (If we use Aggregate functions in the SELECT clause)
+* If two or more columns are included in the GROUP BY Clasue, they are grouped hierarchically according to the order they've been included
+* The `HAVING` Clause specifies a search condition for a group or an aggregate
+
+```SQL
+-- syntax
+SELCT select_list
+FROM table_src
+[WHERE search_condition]
+[GROUP BY group_by_list]    -- after the WHERE clause
+[HAVING search_condition]   -- but before the ORDER BY clause
+[ORDER BY order_by_list]
+
+-- examples
+
+SELECT VendorID, AVG(InvoiceTotal) [Average Inoice Amount]
+FROM Invoices
+GROUP BY VendorID
+HAVING AVG(InvoiceTotal) > 2000
+ORDER BY [Average Inoice Amount]; -- returns 8 rows
+
+-- Groups by vendorID and counts the record in each group
+-- i.e. counts the number of invoices by each particular vendor in the Invoices table
+SELECT VendorID, COUNT(*) [Invoice Quantity]
+FROM Invoices
+GROUP BY VendorID;
+
+-- Summary Query that calculates the no. of Invoies and Avg. Invoice Amt.
+--  for Vendors in each State and City
+-- i.e.
+-- Joins tables Invoies and Vendors by matching VendorID
+--    and then Groups the result set by VendorState and VendorCity
+--    and then counts the records in it and
+--      calculates the Avg of InvoiceTotal in each grouped set
+SELECT VendorState, VendorCity,
+  COUNT(*) [Invoice Quantity],
+  AVG(InvoiceTotal) [Invoice Average]
+FROM Invoices
+  JOIN Vendors ON Invoices.VendorID = Vendors.VendorID
+GROUP BY VendorState, VendorCity
+ORDER BY VendorState, VendorCity; -- 20 rows
+
+-- same as the last example, but only shows those groups who have at least 2 Vendors
+-- i.e.
+--  {SAME AS LAST QUERY} BUT
+--    for each group,
+--      if the no. of rows in the group is less than 2,
+--        that group is not included in the result set
+SELECT VendorState, VendorCity,
+  COUNT(*) [Invoice Quantity],
+  AVG(InvoiceTotal) [Invoice Average]
+FROM Invoices
+  JOIN Vendors ON Invoices.VendorID = Vendors.VendorID
+GROUP BY VendorState, VendorCity
+HAVING COUNT(*) >= 2
+ORDER BY VendorState, VendorCity; -- 12 rows
+```
+
+#### Differences between having _search conditions_ in the `HAVING` Clause and the `WHERE` Clause
+
+* Search condition in the `WHERE` Clause get applied _before_ the rows are grouped and aggregates are calculated
+* Search condition in the `HAVING` Clause is applied _after_ the rows are grouped and aggregates are calculated
+
+> NOTE: `WHERE` Clause can not contain Aggregate functions in it's condition expression.
+
+```SQL
+SELECT VendorName,
+  COUNT(*) [Invoice Quantity],
+  AVG(InvoiceTotal) [Invoice Average]
+FROM Invoices
+  JOIN Vendors ON Invoices.VendorID = Vendors.VendorID
+GROUP BY VendorName
+HAVING AVG(InvoiceTotal) > 500
+ORDER BY [Invoice Quantity] DESC; -- 19 rows
+
+SELECT VendorName,
+  COUNT(*) [Invoice Quantity],
+  AVG(InvoiceTotal) [Invoice Average]
+FROM Invoices
+  JOIN Vendors ON Invoices.VendorID = Vendors.VendorID
+WHERE InvoiceTotal > 500
+GROUP BY VendorName
+ORDER BY [Invoice Quantity] DESC; -- 20 rows
+```
+
 ## Appendix
 
 ### Index of all Keywords in SQL
@@ -764,6 +875,8 @@ INTERSECT
   * [x] `BETWEEN`
   * [x] `LIKE`
   * [x] `IS NULL`
+* [X] `GROUP BY`
+* [X] `HAVING`
 * [x] `ORDER BY`
   * [x] `ASC` - (default)
   * [x] `DESC`
