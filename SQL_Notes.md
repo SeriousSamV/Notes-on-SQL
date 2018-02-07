@@ -740,11 +740,11 @@ INTERSECT
 
 | Function Syntax              | Result                                               |
 | ---------------------------- | ---------------------------------------------------- |
-| `AVG([ALL|DISTINCT] expr)`   | The Average of the non-null values in the expression |
-| `SUM([ALL|DISTINCT] expr)`   | The Total of the non-null values in the expression   |
-| `MIN([ALL|DISTINCT] expr)`   | The Lowest non-null value in the expression          |
-| `MAX([ALL|DISTINCT] expr)`   | The Highest of the non-null values in the expression |
-| `COUNT([ALL|DISTINCT] expr)` | The number of non-null values in the expression      |
+| `AVG([ALL\|DISTINCT] expr)`   | The Average of the non-null values in the expression |
+| `SUM([ALL\|DISTINCT] expr)`   | The Total of the non-null values in the expression   |
+| `MIN([ALL\|DISTINCT] expr)`   | The Lowest non-null value in the expression          |
+| `MAX([ALL\|DISTINCT] expr)`   | The Highest of the non-null values in the expression |
+| `COUNT([ALL\|DISTINCT] expr)` | The number of non-null values in the expression      |
 | `COUNT(*)`                   | The number of the rows selected by the query         |
 
 > NOTE:
