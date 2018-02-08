@@ -738,16 +738,17 @@ INTERSECT
 
 ### _Aggregate Functions_
 
-| Function Syntax              | Result                                               |
-| ---------------------------- | ---------------------------------------------------- |
+| Function Syntax               | Result                                               |
+| ----------------------------- | ---------------------------------------------------- |
 | `AVG([ALL\|DISTINCT] expr)`   | The Average of the non-null values in the expression |
 | `SUM([ALL\|DISTINCT] expr)`   | The Total of the non-null values in the expression   |
 | `MIN([ALL\|DISTINCT] expr)`   | The Lowest non-null value in the expression          |
 | `MAX([ALL\|DISTINCT] expr)`   | The Highest of the non-null values in the expression |
 | `COUNT([ALL\|DISTINCT] expr)` | The number of non-null values in the expression      |
-| `COUNT(*)`                   | The number of the rows selected by the query         |
+| `COUNT(*)`                    | The number of the rows selected by the query         |
 
 > NOTE:
+>
 > * The Expression we specify for the `AVG` and `SUM` functions must result in a numeric value
 > * The Expression for the `MIN`, `MAX`, and `COUNT` functions can result in a _numeric_, _date_, or a _string_ value
 
@@ -860,6 +861,417 @@ GROUP BY VendorName
 ORDER BY [Invoice Quantity] DESC; -- 20 rows
 ```
 
+### Using the `OVER` Clause
+
+* The `OVER` Clause lets us summarize the data in the result set while still returning the rows used to calculate the summary
+* Use `PARTITION BY` Clause to indicate how the data should be _Grouped_ for the aggregate functions to work on
+
+```SQL
+-- syntax
+aggregate_function OVER ([partition_by_clause] [order_by_clause])
+
+-- examples
+
+-----------------------------------------------------------------------
+SELECT COUNT(*) FROM Invoices; -- 114
+
+SELECT InvoiceNumber, InvoiceDate, InvoiceTotal,
+  SUM(InvoiceTotal) OVER (PARTITION BY InvoiceDate) [Date Total],
+  COUNT(InvoiceTotal) OVER (PARTITION BY InvoiceDate) [Date Count],
+  AVG(InvoiceTotal) OVER (PARTITION BY InvoiceDate) [Date Average]
+FROM Invoices; -- 114 rows
+
+SELECT
+  SUM(InvoiceTotal) [Date Total],
+  COUNT(InvoiceTotal) [Date Count],
+  AVG(InvoiceTotal) [Date Average]
+FROM Invoices; -- 1 row
+
+-- FOR CLARITY:
+-- calculate the sum and average of 'InvoiceTotal' by hand, **MANUALLY**
+--    and compare them with the previous result
+--    where InvoiceDate is '2015-12-16 00:00:00'
+SELECT * FROM Invoices WHERE InvoiceDate = '2015-12-16 00:00:00'; -- invoiceID(4, 5, 6)
+-----------------------------------------------------------------------
+
+-- works just like a regular ORDER BY clause
+SELECT InvoiceNumber, TermsID, InvoiceDate, InvoiceTotal,
+  SUM(InvoiceTotal)
+    OVER (PARTITION BY TermsID ORDER BY InvoiceDate) [Cummilative Total],
+  COUNT(InvoiceTotal)
+    OVER (PARTITION BY TermsID ORDER BY InvoiceDate) [Count],
+  AVG(InvoiceTotal)
+    OVER (PARTITION BY TermsID ORDER BY InvoiceDate) [Moving Average]
+FROM Invoices;
+```
+
+## Subqueries
+
+### Using Subqueries like a boss
+
+Queries inside another Query is a sub-Query
+
+#### The Four ways to use a subquery in a `SELECT` statement
+
+1. In a `WHERE` Clause as a Search condition
+2. In a `HAVING` Clause as a Search condition
+3. In a `FROM` Clause as a Table specification
+4. In a `SELECT` Clause as a Column specification
+
+### Using subquery in a `WHERE` Clause in a `SELECT` Statement
+
+```SQL
+-----------------------------------------------------------------
+-- syntax
+WHERE expression comparision_operator [SOME|ANY|ALL] (subquery)
+
+-----------------------------------------------------------------
+-- examples
+
+SELECT * FROM Invoices
+WHERE InvoiceTotal >
+    (SELECT AVG(InvoiceTotal) FROM Invoices)
+ORDER BY InvoiceTotal;
+
+-----------------------------------------------------------------
+
+-- if subquery returns a list (instead of a single value)
+--    use the `IN` operator
+SELECT VendorID, VendorName FROM Vendors
+WHERE VendorID NOT IN
+  (SELECT DISTINCT VendorID FROM Invoices); -- 88 rows
+
+-- the same query without using a subquery
+SELECT Vendors.VendorID, VendorName
+FROM Vendors LEFT JOIN Invoices
+  ON Vendors.VendorID = Invoices.VendorID
+WHERE Invoices.VendorID IS NULL; -- 88 rows
+```
+
+* The subquery is evaluated first to get value(s) it returns, and then the select statement is run as normal
+* Subqueries can be nested within each other how many times as you like, but results in poor performance
+
+#### Comparing subqueries to `JOIN`s
+
+```SQL
+SELECT * FROM Invoices JOIN Vendors
+  ON Invoices.VendorID = Vendors.VendorID
+WHERE VendorState = 'CA'
+ORDER BY InvoiceDate;
+
+SELECT * FROM Invoices
+WHERE VendorID IN
+  (SELECT VendorID FROM Vendors WHERE VendorState = 'CA')
+ORDER BY InvoiceDate;
+
+-- both returns the same 40 rows
+```
+
+##### Advantages of Joins
+
+* The result of a Join op can include Columns _from both Tables_. But in case of subqueries, the result of the outer query can not include the columns of the table named in the inner subquery
+* Queries with Join is faster that the same query with a subquery (especially if using `INNER JOIN`s)
+
+##### Advantages of Subqueries
+
+* We can use subqueries to pass an Aggregate value to the outer query
+
+### Using `ALL`, how it works
+
+`ALL` works almost like the _AND Operator_ on a list.
+
+#### Example
+
+| Condition         | Expanded Expression     | Equivalent Expression   |
+| ----------------- | ----------------------- | ----------------------- |
+| `x > ALL (1, 2)`  | `(x > 1) AND (x > 2)`   | `x > 2`                 |
+| `x < ALL (1, 2)`  | `(x < 1) AND (x < 2)`   | `x < 1`                 |
+| `x = ALL (1, 2)`  | `(x = 1) AND (x = 2)`   | `(x = 1) AND (x = 2)`   |
+| `x <> ALL (1, 2)` | `(x <> 1) AND (x <> 2)` | `(x <> 1) AND (x <> 2)` |
+
+```SQL
+SELECT * FROM Invoices JOIN Vendors ON Vendors.VendorID = Invoices.VendorID
+WHERE InvoiceTotal > ALL
+  (SELECT InvoiceTotal FROM Invoices WHERE VendorID = 34); -- 25 rows
+```
+
+### Using `ANY` and `SOME`, and how it works
+
+`ANY` and `SOME`, both work almost like the _OR Operator_ on a list.
+
+#### Example
+
+| Condition         | Expanded Expression    | Equivalent Expression  |
+| ----------------- | ---------------------- | ---------------------- |
+| `x > ANY (1, 2)`  | `(x > 1) OR (x > 2)`   | `x > 1`                |
+| `x < ANY (1, 2)`  | `(x < 1) OR (x < 2)`   | `x < 2`                |
+| `x = ANY (1, 2)`  | `(x = 1) OR (x = 2)`   | `(x = 1) OR (x = 2)`   |
+| `x <> ANY (1, 2)` | `(x <> 1) OR (x <> 2)` | `(x <> 1) OR (x <> 2)` |
+
+```SQL
+SELECT * FROM Vendors JOIN Invoices ON Vendors.VendorID = Invoices.VendorID
+WHERE InvoiceTotal > ANY
+  (SELECT InvoiceTotal FROM Invoices WHERE VendorID = 34); -- 59 rows
+
+-- the same using SOME, gives the Same result
+SELECT * FROM Vendors JOIN Invoices ON Vendors.VendorID = Invoices.VendorID
+WHERE InvoiceTotal > SOME
+  (SELECT InvoiceTotal FROM Invoices WHERE VendorID = 34); -- 59 rows
+```
+
+> **NOTE**: If all the rows returned by the subquery contains a NULL, the comparision that uses `ALL` or `ANY` or `SOME` will always be _false_.
+
+### Using _Correlated Subqueries_
+
+* _Correlated subqueries_ are subqueries that are executed once for each row that's processed by the _Outer Query_
+* A Correlated subquery refers to a value that's provided by a column in the outer query. And because the value of the refered column of the outer table changes for each and every row being processed, the inner query has to be executed for each and every row in the outer query
+
+```SQL
+SELECT * FROM Invoices [T1]
+WHERE InvoiceTotal >
+  (SELECT AVG(InvoiceTotal) FROM Invoices [T2]
+  WHERE T1.VendorID = T2.VendorID); -- 36 rows
+```
+
+### Using the `EXISTS` Operator
+
+* This operator tests whether the subquery returns a result set or not
+* When we use this operator on a subquery, the outer query doesn't get a result set; instead the operator returns an indication of whether any rows satisfy the seach condition of the subquery
+* Queries that use this operator is faster because it doesn't pass data from inner query to outer query
+
+```SQL
+-- syntax
+WHERE [NOT] EXISTS (subquery)
+
+-- example
+SELECT * FROM Vendors
+WHERE NOT EXISTS
+  (SELECT * FROM Invoices WHERE Invoices.VendorID = Vendors.VendorID); -- 88 rows
+
+SELECT * FROM Vendors
+WHERE EXISTS
+  (SELECT * FROM Invoices WHERE Invoices.VendorID = Vendors.VendorID); -- 34 rows
+
+SELECT COUNT(*) FROM Vendors; -- 122
+
+-- cross-check VendorID in Invoices with the above 2 queries to confirm working logic
+SELECT VendorID FROM Invoices;
+```
+
+### Other "exotic" ways to use subqueries (which you'll never use :laughing:)
+
+#### Using Subqueries in the `FROM` Clause
+
+```SQL
+SELECT Invoices.VendorID, MAX(InvoiceDate) [Latest Invoice],
+  AVG(InvoiceTotal) [Average Invoice]
+FROM Invoices
+  JOIN -- Implicitly `INNER JOIN`
+      (SELECT TOP 5 VendorID, AVG(InvoiceTotal) [Average Invoice]
+      FROM Invoices
+      GROUP BY VendorID
+      ORDER BY [Average Invoice] DESC) AS TopVendor
+    ON Invoices.VendorID = TopVendor.VendorID
+GROUP BY Invoices.VendorID
+ORDER BY [Latest Invoice] DESC; -- 5 rows
+
+SELECT T1.VendorID, T2.VendorCity
+FROM Invoices [T1]
+  JOIN
+      (SELECT * FROM Vendors WHERE VendorCity LIKE 'C%') [T2] -- 9 rows for inner query
+    ON T2.VendorID = T1.VendorID; -- 3 rows (matching VendorIDs)
+```
+
+#### Using Subqueries in the `SELECT` Clause
+
+Only one rule here: The Subquery in the SELECT Clause should return _ONLY_ a _Single Value_.
+
+```SQL
+SELECT DISTINCT VendorName,
+  (SELECT MAX(InvoiceDate) FROM Invoices
+  WHERE Invoices.VendorID = Vendors.VendorID) [Latest Invoice]
+FROM Vendors
+ORDER BY [Latest Invoice] DESC; -- 122 rows
+
+SELECT VendorName, (SELECT InvoiceID FROM Invoices) FROM Vendors; -- Won't work
+-- inner subquery in the SELECT Clause should return ONLY a single value
+```
+
+## **C**reate, **U**pdate and **D**elete Data (The CUD in CRUD :joy:)
+
+### Using the `SELECT INTO` Statement
+
+> **NOTE**: This Statement `SELECT INTO` is a extention of SQL by SQL Server, and thus will only work on Microsoft SQL Servers :cry:
+
+> _**Warning**_: Tables created by using `SELECT INTO` statement won't copy the definitions of the primary keys, foreign keys, indexes, default values and other constaints. Only Data is and column name of the result set of the `SELECT` Clause is copied and used.
+
+```SQL
+-- Syntax
+SELECT select_list
+INTO table_name
+FROM table_src
+[WHERE search_condition]
+[GROUP BY groupby_list]
+[HAVING search_condition]
+[ORDER BY orderby_list]
+
+-- examples
+
+-- a SELECT statement that creates a copy of the Invoices table
+SELECT *
+INTO InvoiceCopy
+FROM Invoices; -- 114 rows affected (114 rows in invoices table being copied to InvoiceCopy)
+
+-- a SELECT statement that creates a partial copy of the Invoices table
+SELECT *
+INTO OldInvoices
+FROM Invoices
+WHERE (InvoiceTotal - PaymentTotal - CreditTotal) = 0; -- 103 rows affected
+
+-- a SELECT statement that creates a table with summary rows
+SELECT VendorID, SUM(InvoiceTotal) [SumOfInvoices]
+INTO VendorBalances
+FROM Invoices
+WHERE (InvoiceTotal - PaymentTotal - CreditTotal) <> 0
+GROUP BY VendorID; -- 7 rows affected
+SELECT * FROM VendorBalances; -- 7 rows
+
+-- clean up
+DROP TABLE InvoiceCopy, VendorBalances, OldInvoices;
+```
+
+### Inserting new Rows into a table like a boss :sunglasses:
+
+```SQL
+-- Syntax
+INSERT [INTO] table_name [(column_list)]
+[DEFAULT] VALUES (expression_1 [, expression_2]...)
+  [, (expression_1 [, expression_2]]
+
+-- examples
+
+INSERT INTO InvoiceCopy
+VALUES (97, '456654', '2017-05-01', 8500.50, 0, 0, 1, '2016-04-28', NULL);
+
+-- more verbose synatax and column specific
+INSERT INTO InvoiceCopy
+  (VendorID, InvoiceNumber, InvoiceTotal, PaymentTotal, CreditTotal,
+  TermsID, InvoiceDate, InvoiceDueDate)
+VALUES
+  (97, '456654', 8580.50, 0, 0, 1, '2017-05-01', '2016-04-30');
+
+-- inserting multiple rows in a single statement
+INSERT INTO InvoiceCopy
+VALUES
+  (97, '456654', '2017-05-01', 8500.50, 0, 0, 1, '2016-04-28', NULL),
+  (102, '456654', '2017-06-01', 7500.50, 0, 0, 1, '2016-05-28', NULL),
+  (72, '456654', '2017-07-01', 9500.50, 0, 0, 1, '2016-06-28', NULL);
+```
+
+#### Inserting _Default_ values and _NULL_ values
+
+```SQL
+-- setup
+CREATE TABLE ColorSample (
+  ID INT IDENTITY(1, 1), -- autoincrement 
+  ColorNumber INT DEFAULT 0, -- DEFAUT value is 0
+  ColorName VARCHAR(20) NULL); -- DEFAULT value is NULL / allows NULL
+
+SELECT * FROM ColorSample;
+
+INSERT INTO ColorSample (ColorNumber)
+VALUES (606); -- inserts (1 <autoincremented>, 606, NULL)
+
+INSERT INTO ColorSample (ColorName)
+VALUES ('Red'); -- inserts (2 <autoincremented>, 0 <DEFAULT value>, 'Red')
+
+INSERT INTO ColorSample
+VALUES (101, NULL); -- inserts (3 <autoincremented>, 101, NULL <NULL allowed, no value given>)
+
+-- inserts (4 <autoincremented>, 0 <DEFAULT value>, NULL <NULL allowed, no value given>)
+INSERT INTO ColorSample
+VALUES (DEFAULT, NULL);
+
+-- inserts (5 <autoincremented>, 0 <DEFAULT value>, NULL <NULL allowed, no value given>)
+INSERT INTO ColorSample
+DEFAULT VALUES;
+```
+
+### Inserting rows _Selected_ from another table
+
+```SQL
+-- syntax
+INSERT [INTO] table_name [(column_list)]
+SELECT column_list
+FROM table_source
+[WHERE search_condition]
+
+-- examples
+
+SELECT COUNT(*) FROM InvoiceArchive; -- 0
+
+INSERT INTO InvoiceArchive
+SELECT *
+FROM InvoiceCopy
+WHERE (InvoiceTotal - PaymentTotal - CreditTotal) = 0; -- 103 rows affected
+
+SELECT COUNT(*) FROM InvoiceArchive; -- 103
+```
+
+### Modifying existing rows
+
+```SQL
+-- Syntax
+UPDATE table_name
+SET column_name_1 = expression_1 [, column_name_2 = expression_2]...
+[FROM] table_src [[AS] table_alias]
+[WHERE search_condition]
+
+-- examples
+
+-- update single row
+UPDATE InvoiceCopy
+SET PaymentDate = '2017-02-28',
+  PaymentTotal = 25000.65
+WHERE InvoiceNumber = '97/522'; -- 1 row affected
+
+-- update multiple rows based on condition
+UPDATE InvoiceCopy
+SET TermsID = 1
+WHERE VendorID = 95; -- 6 rows affected
+
+-- Initial value
+SELECT CreditTotal FROM InvoiceCopy WHERE InvoiceNumber = '97/522'; -- 200.00
+
+-- read initial value off a row and update the same row using that value
+UPDATE InvoiceCopy
+SET CreditTotal = CreditTotal + 100
+WHERE InvoiceNumber = '97/522';
+
+SELECT CreditTotal FROM InvoiceCopy WHERE InvoiceNumber = '97/522'; -- 300.00
+```
+
+### Using Subqueries in an _Update_ operation
+
+```SQL
+UPDATE InvoiceCopy
+SET CreditTotal = CreditTotal + 100,
+  InvoiceDueDate = (SELECT MAX(InvoiceDueDate) FROM InvoiceCopy) -- subquery res: '2016-06-28 00:00:00'
+WHERE InvoiceNumber = '97/522'; -- 1 row affected
+
+UPDATE InvoiceCopy
+SET TermsID = 1
+WHERE VendorID = -- subquery res: 95
+  (SELECT VendorID FROM Vendors WHERE VendorName = 'Pacific Bell'); -- 6 rows affected
+
+-- using a subquery which returns a list
+UPDATE InvoiceCopy
+SET TermsID = 1
+WHERE VendorID IN
+  (SELECT VendorID FROM Vendors -- subquery returns 80 1-D rows
+  WHERE VendorState IN ('CA', 'AZ', 'NV')); -- 52 rows affected
+```
+
 ## Appendix
 
 ### Index of all Keywords in SQL
@@ -869,14 +1281,20 @@ ORDER BY [Invoice Quantity] DESC; -- 20 rows
   * [x] `DISTINCT` - Removes duplicates from the result set (compares ALL columns and Sorts the result set based on first column)
   * [x] `TOP`
     * [x] `WITH TIES`
+* [ ] `OVER`
+  * [ ] `PARTITION BY`
 * [x] `UNION`
+* [X] `INTO`
 * [x] `FROM`
 * [x] `WHERE`
   * [x] `BETWEEN`
   * [x] `LIKE`
   * [x] `IS NULL`
-* [X] `GROUP BY`
-* [X] `HAVING`
+  * [x] `ALL`
+  * [x] `ANY`
+  * [x] `SOME`
+* [x] `GROUP BY`
+* [x] `HAVING`
 * [x] `ORDER BY`
   * [x] `ASC` - (default)
   * [x] `DESC`
