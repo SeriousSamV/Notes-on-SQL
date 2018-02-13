@@ -4,6 +4,7 @@ Just some :poop: shitty notes I take when I read books and expriment with SQL
 
 ## Contributors
 
+* Paul Samuel Vishesh [@Samuel0Paul](http://twitter.com/samuel0paul)
 * MONICA __monica94anusuya@gmail.com__
 
 ## License
