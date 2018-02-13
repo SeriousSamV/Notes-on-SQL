@@ -2,7 +2,7 @@
 
 Just some :poop: shitty notes I take when I read books and expriment with SQL
 
-##  Contributors
+## Contributors
 
 * MONICA __monica94anusuya@gmail.com__
 
