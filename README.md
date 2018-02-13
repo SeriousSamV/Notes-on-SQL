@@ -2,6 +2,10 @@
 
 Just some :poop: shitty notes I take when I read books and expriment with SQL
 
+##  Contributors
+
+* MONICA __monica94anusuya@gmail.com__
+
 ## License
 
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
